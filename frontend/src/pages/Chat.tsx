@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 interface Message {
   id: number;
@@ -18,6 +18,7 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // AI 加载状态
   const chatRef = useRef<HTMLDivElement>(null);
 
   // 每次都创建新的识别实例（修复第二次不能用）
@@ -81,21 +82,62 @@ export default function Chat() {
     }
   };
 
+  // ==============================================
+  // ✅ 这里是【后端接口预留位】
+  // 你只需要在这里替换成真实请求即可
+  // ==============================================
+  const getStellaReply = async (userMessage: string) => {
+    try {
+      setIsLoading(true);
+
+      // ========= 【对接后端接口】 =========
+      // 把下面这一段替换成你的真实接口请求
+      // ===================================
+      const response = await fetch('https://你的后端地址/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userMessage,  // 发送给后端的内容
+        }),
+      });
+
+      const data = await response.json();
+      const reply = data.reply; // 后端返回的回答
+      // ===================================
+
+      setIsLoading(false);
+      return reply || '我听不见你的声音了，再试一次吧';
+    } catch (err) {
+      setIsLoading(false);
+      return '我好像迷路了 ✨';
+    }
+  };
+
   // 发送消息
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!inputText.trim()) return;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // 加入用户消息
     setMessages([...messages, { id: Date.now(), content: inputText, sender: 'user', time }]);
+    const userMsg = inputText;
     setInputText('');
+
+    // ==============================
+    // 调用 AI 接口获取真实回复
+    // ==============================
+    const reply = await getStellaReply(userMsg);
 
     setTimeout(() => {
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
-        content: "我在这里听你说 ✨",
+        content: reply,
         sender: 'stella',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }]);
-    }, 800);
+    }, 300);
   };
 
   const clearChat = () => setMessages([]);
@@ -177,6 +219,13 @@ export default function Chat() {
               )}
             </div>
           ))
+        )}
+
+        {/* AI 正在思考 */}
+        {isLoading && (
+          <div style={{ textAlign: 'center', color: '#888', margin: '10px 0' }}>
+            Stella 正在思考...
+          </div>
         )}
       </div>
 
