@@ -12,6 +12,7 @@
   "dependencies": {
     "framer-motion": "^12.39.0",
     "howler": "^2.2.4",
+    "idb": "^8.0.3",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1"

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { IDB } from '../utils/indexedDB';
 
 export default function Breathing() {
   const [isStart, setIsStart] = useState(false);
@@ -63,17 +64,15 @@ export default function Breathing() {
     clearAllTimer();
     setIsStart(false);
     setTip('点击开始开启呼吸练习');
-    setSound('none'); // 自动切到静音
+    setSound('none');
   };
 
-  // ==============================================
-  // 只在这里加了保存到情绪穹顶的逻辑，别的完全没动
-  // ==============================================
-  const saveMood = () => {
+  const saveMood = async () => {
     if (!preMood || !postMood) {
       alert('请选择练习前后的心情');
       return;
     }
+
     const record = {
       pre: preMood,
       post: postMood,
@@ -81,21 +80,14 @@ export default function Breathing() {
     };
     localStorage.setItem('breathing_mood', JSON.stringify(record));
 
-    // ====================== 新增：同步保存到情绪穹顶 ======================
-    const moodType = postMood.includes('平静') || postMood.includes('轻松') 
-      ? 'calm' 
-      : postMood.includes('无变化') 
-      ? 'neutral' 
-      : 'anxious';
-
-    const records = JSON.parse(localStorage.getItem('moodRecords') || '[]');
-    records.push({
+    const date = new Date().toISOString().split('T')[0];
+    // 新增记录，不会覆盖
+    await IDB.saveEmotion({
+      date,
+      emotion: postMood,
       type: 'breathing',
-      mood: moodType,
-      timestamp: Date.now()
+      note: `练习前：${preMood} → 练习后：${postMood}`
     });
-    localStorage.setItem('moodRecords', JSON.stringify(records));
-    // ====================================================================
 
     alert('保存成功！');
     setPreMood('');
@@ -114,7 +106,6 @@ export default function Breathing() {
       <h1 style={{ fontSize: '36px', color: '#7dd3fc', marginBottom: 20 }}>🌊 海浪呼吸练习</h1>
       <p style={{ fontSize: '18px', color: '#cbd5e1', marginBottom: 40 }}>跟随海浪节奏，放松身心</p>
 
-      {/* 背景音乐选择 */}
       <div style={{ marginBottom: 50, display: 'flex', gap: 20, justifyContent: 'center' }}>
         <button onClick={() => setSound('none')} style={{
           padding: '12px 24px', borderRadius: 20, border: '1px solid #475569',
@@ -133,7 +124,6 @@ export default function Breathing() {
         }}>🌧️ 雨声</button>
       </div>
 
-      {/* 呼吸动画圆圈 */}
       <div
         style={{
           width: '200px',
@@ -149,7 +139,6 @@ export default function Breathing() {
 
       <h2 style={{ fontSize: '28px', color: '#7dd3fc', marginBottom: 40 }}>{tip}</h2>
 
-      {/* 控制按钮 */}
       <div style={{ display: 'flex', gap: 30, justifyContent: 'center', marginBottom: 40 }}>
         <button
           onClick={startBreath}
@@ -182,7 +171,6 @@ export default function Breathing() {
         </button>
       </div>
 
-      {/* 心情选择 & 保存 */}
       <div style={{ fontSize: 14, color: '#cbd5e1' }}>
         <div style={{ marginBottom: 15 }}>
           <span>练习前：</span>

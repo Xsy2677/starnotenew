@@ -1,4 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback
+} from 'react';
+import { IDB } from '../utils/indexedDB';
 
 interface MoodRecord {
   id?: number;
@@ -23,27 +29,27 @@ export default function MoodCanvas() {
     '#4ade80', '#16a34a', '#84cc16', '#ffffff', '#d1d5db', '#6b7280'
   ];
 
-  // 初始化 IndexedDB
+  // 加载涂鸦历史
   useEffect(() => {
-    const initDB = () => {
-      const request = indexedDB.open('MoodCanvasDB', 1);
-      request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
-        const db = (e.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains('records')) {
-          db.createObjectStore('records', { keyPath: 'id', autoIncrement: true });
-        }
-      };
-      request.onsuccess = (e: Event) => {
-        const db = (e.target as IDBOpenDBRequest).result;
-        const tx = db.transaction('records', 'readonly');
-        const store = tx.objectStore('records');
-        store.getAll().onsuccess = (res: Event) => {
-          const records = (res.target as IDBRequest).result as MoodRecord[];
-          setHistory(records);
-        };
-      };
+    const loadHistory = async () => {
+      try {
+        const all = await IDB.getWeekEmotions();
+        const canvasHistory = all
+          .filter(item => item.type === 'drawing')
+          .map(item => ({
+            id: item.id,
+            date: item.date,
+            mood: item.emotion,
+            message: item.note || '',
+            image: item.image || ''
+          }));
+        // 倒序展示，最新记录在最前
+        setHistory(canvasHistory.reverse());
+      } catch (e) {
+        console.error('加载历史失败', e);
+      }
     };
-    initDB();
+    loadHistory();
   }, []);
 
   // 初始化画布
@@ -125,32 +131,54 @@ export default function MoodCanvas() {
     }
   }, [selectedColor, lineWidth]);
 
-  const saveRecord = () => {
+  const saveRecord = async () => {
     if (!result) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const imageData = canvas.toDataURL('image/png');
-    const record: MoodRecord = {
-      date: new Date().toLocaleString(),
-      image: imageData,
-      mood: result.mood,
-      message: result.msg
-    };
+    const image = canvas.toDataURL('image/png');
+    const date = new Date().toISOString().split('T')[0];
 
-    const request = indexedDB.open('MoodCanvasDB', 1);
-    request.onsuccess = (e: Event) => {
-      const db = (e.target as IDBOpenDBRequest).result;
-      const tx = db.transaction('records', 'readwrite');
-      const store = tx.objectStore('records');
-      store.add(record).onsuccess = () => {
-        alert('记录保存成功');
-        store.getAll().onsuccess = (res: Event) => {
-          const records = (res.target as IDBRequest).result as MoodRecord[];
-          setHistory(records);
-        };
-      };
-    };
+    try {
+      // 新增情绪记录，永久不覆盖
+      await IDB.saveEmotion({
+        date,
+        emotion: result.mood,
+        type: 'drawing',
+        note: result.msg,
+        image
+      });
+
+      // 新增涂鸦记录
+      try {
+        await IDB.saveDrawing({
+          date: new Date().toISOString(),
+          image: image,
+          emotion: result.mood
+        });
+      } catch (err) {
+        console.log("涂鸦表保存提示", err);
+      }
+
+      alert('保存成功！');
+
+      // 刷新历史列表
+      const all = await IDB.getWeekEmotions();
+      const canvasHistory = all
+        .filter(item => item.type === 'drawing')
+        .map(item => ({
+          id: item.id,
+          date: item.date,
+          mood: item.emotion,
+          message: item.note || '',
+          image: item.image || ''
+        }));
+      setHistory(canvasHistory.reverse());
+
+    } catch (e) {
+      console.error('保存失败', e);
+      alert('保存失败，请重试');
+    }
   };
 
   const clear = () => {

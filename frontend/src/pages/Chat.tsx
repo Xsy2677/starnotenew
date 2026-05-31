@@ -1,4 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import { sendChatMessage } from '../services/ai';
+import { IDB } from '../utils/indexedDB';
+
+const TEST_USER_ID = "test-user-001";
+const TEST_SESSION_ID = "test-session-001";
 
 interface Message {
   id: number;
@@ -18,14 +23,12 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // AI 加载状态
+  const [isLoading, setIsLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  // 每次都创建新的识别实例（修复第二次不能用）
   const getRecognition = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
-
     const rec = new SpeechRecognition();
     rec.lang = 'zh-CN';
     rec.continuous = true;
@@ -33,18 +36,15 @@ export default function Chat() {
     return rec;
   };
 
-  // 自动滚动
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // 开始录音
   const startRecording = () => {
     const rec = getRecognition();
     if (!rec) return;
-
     setIsRecording(true);
     rec.onresult = (e: any) => {
       let text = '';
@@ -53,16 +53,13 @@ export default function Chat() {
       }
       setInputText(text);
     };
-
     rec.onend = () => {
       if (isRecording) rec.start();
     };
-
     rec.start();
     (window as any).currentRec = rec;
   };
 
-  // 停止录音
   const stopRecording = () => {
     setIsRecording(false);
     if ((window as any).currentRec) {
@@ -72,7 +69,6 @@ export default function Chat() {
     }
   };
 
-  // 切换录音
   const toggleRecording = () => {
     if (isRecording) {
       stopRecording();
@@ -82,62 +78,48 @@ export default function Chat() {
     }
   };
 
-  // ==============================================
-  // ✅ 这里是【后端接口预留位】
-  // 你只需要在这里替换成真实请求即可
-  // ==============================================
-  const getStellaReply = async (userMessage: string) => {
-    try {
-      setIsLoading(true);
-
-      // ========= 【对接后端接口】 =========
-      // 把下面这一段替换成你的真实接口请求
-      // ===================================
-      const response = await fetch('https://你的后端地址/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: userMessage,  // 发送给后端的内容
-        }),
-      });
-
-      const data = await response.json();
-      const reply = data.reply; // 后端返回的回答
-      // ===================================
-
-      setIsLoading(false);
-      return reply || '我听不见你的声音了，再试一次吧';
-    } catch (err) {
-      setIsLoading(false);
-      return '我好像迷路了 ✨';
-    }
-  };
-
-  // 发送消息
   const sendMessage = async () => {
     if (!inputText.trim()) return;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    // 加入用户消息
-    setMessages([...messages, { id: Date.now(), content: inputText, sender: 'user', time }]);
     const userMsg = inputText;
     setInputText('');
 
-    // ==============================
-    // 调用 AI 接口获取真实回复
-    // ==============================
-    const reply = await getStellaReply(userMsg);
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      content: userMsg,
+      sender: 'user',
+      time
+    }]);
 
-    setTimeout(() => {
+    setIsLoading(true);
+    try {
+      const res = await sendChatMessage(TEST_USER_ID, userMsg, TEST_SESSION_ID);
+      const aiTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setMessages(prev => [...prev, {
         id: Date.now() + 1,
-        content: reply,
+        content: res.response,
         sender: 'stella',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: aiTime
       }]);
-    }, 300);
+
+      // 本地保存
+      await IDB.saveChat({
+        session_id: TEST_SESSION_ID,
+        messages: [...messages,
+          { id: Date.now(), content: userMsg, sender: 'user', time },
+          { id: Date.now() + 1, content: res.response, sender: 'stella', time: aiTime }
+        ]
+      });
+    } catch (e) {
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1,
+        content: '暂时无法连接服务器，请稍后再试',
+        sender: 'stella',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const clearChat = () => setMessages([]);
@@ -153,7 +135,6 @@ export default function Chat() {
       color: '#fff',
       overflow: 'hidden',
     }}>
-      {/* 顶部 */}
       <div style={{
         width: '100%',
         padding: '20px 24px',
@@ -166,7 +147,6 @@ export default function Chat() {
         <p style={{ margin: '4px 0 0', fontSize: 12, color: '#aaa' }}>所有对话仅保存在本地</p>
       </div>
 
-      {/* 聊天区域 */}
       <div ref={chatRef} style={{
         flex: 1,
         padding: '20px 24px',
@@ -221,7 +201,6 @@ export default function Chat() {
           ))
         )}
 
-        {/* AI 正在思考 */}
         {isLoading && (
           <div style={{ textAlign: 'center', color: '#888', margin: '10px 0' }}>
             Stella 正在思考...
@@ -229,7 +208,6 @@ export default function Chat() {
         )}
       </div>
 
-      {/* 底部 */}
       <div style={{
         width: '100%',
         padding: '16px 24px',
@@ -267,9 +245,10 @@ export default function Chat() {
           }}
         />
 
-        <button onClick={sendMessage} style={{
+        <button onClick={sendMessage} disabled={isLoading} style={{
           width: 36, height: 36, borderRadius: '50%',
-          background: '#4f46e5', border: 'none', color: '#fff',
+          background: isLoading ? '#6366f180' : '#4f46e5',
+          border: 'none', color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>➡️</button>
       </div>

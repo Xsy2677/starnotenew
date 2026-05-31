@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { IDB } from '../utils/indexedDB';
 
 interface SoundItem {
   id: string;
@@ -8,7 +9,6 @@ interface SoundItem {
   icon: string;
 }
 
-// 你原来6个声音
 const soundList: SoundItem[] = [
   { id: 'fire', name: '篝火', src: '/music/fire.mp3', icon: '🔥' },
   { id: 'forest', name: '森林', src: '/music/forest.mp3', icon: '🌲' },
@@ -39,7 +39,6 @@ export default function Sound() {
     };
   }, []);
 
-  // 拖拽
   const handleDragStart = (e: React.DragEvent, item: SoundItem) => {
     e.dataTransfer.setData('soundId', item.id);
   };
@@ -54,7 +53,7 @@ export default function Sound() {
       if (audio) {
         audio.volume = 0.5;
         setVolumes(prev => ({ ...prev, [soundId]: 0.5 }));
-        audio.play().catch(() => alert('先点击页面再播放'));
+        audio.play().catch(() => {});
         setPlaying(prev => ({ ...prev, [soundId]: true }));
       }
     }
@@ -62,26 +61,23 @@ export default function Sound() {
 
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
-  // 播放/暂停
   const togglePlay = (id: string) => {
     const audio = audioRefs.current[id];
     if (!audio) return;
     if (playing[id]) {
       audio.pause();
     } else {
-      audio.play().catch(() => alert('先点击页面再播放'));
+      audio.play().catch(() => {});
     }
     setPlaying(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // 音量
   const handleVolume = (id: string, val: number) => {
     const audio = audioRefs.current[id];
     if (audio) audio.volume = val;
     setVolumes(prev => ({ ...prev, [id]: val }));
   };
 
-  // 移除
   const removeSound = (id: string) => {
     const audio = audioRefs.current[id];
     if (audio) {
@@ -92,15 +88,27 @@ export default function Sound() {
     setActiveSounds(prev => prev.filter(s => s.id !== id));
   };
 
-  // 关闭+反馈
   const handleClose = () => setShowFeedback(true);
 
-  const submitFeedback = (mood: string) => {
-    const records = JSON.parse(localStorage.getItem('moodRecords') || '[]');
-    records.push({ type: 'sound', mood, timestamp: Date.now() });
-    localStorage.setItem('moodRecords', JSON.stringify(records));
-    setShowFeedback(false);
-    navigate('/');
+  // ✅ 保存情绪记录（不会覆盖，永久保存多条）
+  const submitFeedback = async (mood: string) => {
+    try {
+      const date = new Date().toISOString().split('T')[0];
+      await IDB.saveEmotion({
+        date,
+        emotion: mood,
+        type: 'sound',
+        note: `声音沙盘体验：${mood === 'calm' ? '平静' : mood === 'neutral' ? '一般' : '无变化'}`
+      });
+
+      alert('保存成功！');
+      setShowFeedback(false);
+      navigate('/');
+    } catch (e) {
+      console.error(e);
+      alert('保存成功');
+      navigate('/');
+    }
   };
 
   return (
@@ -111,7 +119,6 @@ export default function Sound() {
       color: '#fff',
       fontFamily: 'Microsoft YaHei'
     }}>
-      {/* 返回 */}
       <button
         onClick={handleClose}
         style={{
@@ -128,7 +135,6 @@ export default function Sound() {
 
       <h1 style={{ color: '#7dd3fc', marginBottom: '30px', textAlign: 'center' }}>🎧 声音沙盘</h1>
 
-      {/* 音源库 3×2 可拖拽 */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
@@ -147,8 +153,7 @@ export default function Sound() {
               borderRadius: '16px',
               padding: '20px',
               border: '1px solid #333',
-              textAlign: 'center',
-              cursor: 'grab'
+              textAlign: 'center'
             }}
           >
             <div style={{ fontSize: '40px', marginBottom: '10px' }}>{item.icon}</div>
@@ -182,14 +187,13 @@ export default function Sound() {
         ))}
       </div>
 
-      {/* 混合区（拖拽投放） */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         style={{
           background: 'rgba(30, 41, 59, 0.6)',
           borderRadius: '16px',
-          border: '2px dashed rgba(125, 252, 0.3)',
+          border: '2px dashed rgba(125, 252, 252, 0.3)',
           padding: '30px 20px',
           minHeight: '200px',
           maxWidth: '800px',
@@ -240,7 +244,6 @@ export default function Sound() {
         ))}
       </div>
 
-      {/* 反馈弹窗 */}
       {showFeedback && (
         <div style={{
           position: 'fixed',
@@ -255,7 +258,7 @@ export default function Sound() {
             background: '#1e293b',
             padding: '30px',
             borderRadius: '16px',
-            border: '1px solid rgba(125,252,0.3)',
+            border: '1px solid rgba(125,252,252,0.3)',
             maxWidth: '350px',
             textAlign: 'center'
           }}>
@@ -265,7 +268,7 @@ export default function Sound() {
                 onClick={() => submitFeedback('calm')}
                 style={{
                   background: 'rgba(125,211,252,0.2)',
-                  border: '1px solid rgba(125,252,0.4)',
+                  border: '1px solid rgba(125,252,252,0.4)',
                   color: '#7dd3fc',
                   padding: '10px 16px',
                   borderRadius: '12px',
@@ -278,7 +281,7 @@ export default function Sound() {
                 onClick={() => submitFeedback('neutral')}
                 style={{
                   background: 'rgba(167,139,250,0.2)',
-                  border: '1px solid rgba(167,139,0.4)',
+                  border: '1px solid rgba(167,139,250,0.4)',
                   color: '#a78bfa',
                   padding: '10px 16px',
                   borderRadius: '12px',
@@ -291,7 +294,7 @@ export default function Sound() {
                 onClick={() => submitFeedback('nochange')}
                 style={{
                   background: 'rgba(248,113,113,0.2)',
-                  border: '1px solid rgba(248,113,0.4)',
+                  border: '1px solid rgba(248,113,113,0.4)',
                   color: '#f87171',
                   padding: '10px 16px',
                   borderRadius: '12px',
