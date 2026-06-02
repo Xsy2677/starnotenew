@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import Card from '../components/Card';
 import { useNavigate } from 'react-router-dom';
+import { IDB } from '../utils/indexedDB';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -10,40 +11,63 @@ export default function Home() {
     hope: 0
   });
 
+  // ✅ 从 indexedDB 真实读取情绪数据（涂鸦、呼吸、声音全部统计）
   useEffect(() => {
-    const records = JSON.parse(localStorage.getItem('moodRecords') || '[]');
-    const weekAgo = Date.now() - 7 * 24 * 60 * 1000;
-    const weekRecords = records.filter((r: any) => r.timestamp >= weekAgo);
+    const loadMoodStats = async () => {
+      try {
+        const allRecords = await IDB.getWeekEmotions();
+        const now = Date.now();
+        const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-    let calm = 0, anxious = 0, neutral = 0;
-    weekRecords.forEach((r: any) => {
-      if (r.mood === 'calm') calm++;
-      else if (r.mood === 'anxious') anxious++;
-      else neutral++;
-    });
+        let calm = 0;
+        let anxious = 0;
+        let neutral = 0;
 
-    const total = weekRecords.length || 1;
-    let calmPct = Math.round((calm / total) * 100);
-    let anxiousPct = Math.round((anxious / total) * 100);
-    let neutralPct = Math.round((neutral / total) * 100);
+        allRecords.forEach((rec: any) => {
+          const recordTime = new Date(rec.date).getTime();
+          if (recordTime < oneWeekAgo) return;
 
-    const diff = 100 - (calmPct + anxiousPct + neutralPct);
-    if (diff !== 0) {
-      if (calmPct > 0) calmPct += diff;
-      else if (neutralPct > 0) neutralPct += diff;
-      else anxiousPct += diff;
-    }
+          const mood = rec.emotion;
+          if (
+            mood.includes('平静') ||
+            mood.includes('放松') ||
+            mood.includes('愉悦') ||
+            mood === 'calm'
+          ) {
+            calm++;
+          } else if (
+            mood.includes('焦虑') ||
+            mood.includes('烦躁') ||
+            mood.includes('低落') ||
+            mood === 'anxious'
+          ) {
+            anxious++;
+          } else {
+            neutral++;
+          }
+        });
 
-    setStats({
-      calm: calmPct,
-      anxious: anxiousPct,
-      hope: neutralPct
-    });
+        const total = calm + anxious + neutral || 1;
+        const calmPct = Math.round((calm / total) * 100);
+        const anxiousPct = Math.round((anxious / total) * 100);
+        let neutralPct = 100 - calmPct - anxiousPct;
+        if (neutralPct < 0) neutralPct = 0;
+
+        setStats({
+          calm: calmPct,
+          anxious: anxiousPct,
+          hope: neutralPct
+        });
+      } catch (err) {
+        console.error('统计失败', err);
+      }
+    };
+
+    loadMoodStats();
   }, []);
 
   return (
     <div style={{ padding: '20px' }}>
-      {/* 梦幻星空 · 情绪入口（月亮图标+20颗星星） */}
       <Card style={{
         textAlign: 'center',
         marginBottom: '20px',
@@ -54,7 +78,6 @@ export default function Home() {
         overflow: 'hidden',
         position: 'relative'
       }}>
-        {/* 光晕 */}
         <div style={{
           position: 'absolute',
           top: 0, left: 0, right: 0, bottom: 0,
@@ -62,7 +85,6 @@ export default function Home() {
           pointerEvents: 'none'
         }}></div>
 
-        {/* 20颗星星 */}
         {[
           { t:'5%', l:'10%', s:3, o:0.7 },
           { t:'8%', l:'25%', s:2, o:0.6 },
@@ -100,7 +122,6 @@ export default function Home() {
           />
         ))}
 
-        {/* 新图标：温柔月亮🌙 */}
         <div style={{
           fontSize: '60px',
           marginBottom: '16px',
@@ -157,7 +178,6 @@ export default function Home() {
         }}>仅本地保存 · 不打扰的温柔陪伴</p>
       </Card>
 
-      {/* 情绪穹顶 */}
       <Card style={{
         background: 'linear-gradient(135deg, rgba(20,30,50,0.7), rgba(10,15,30,0.8))',
         border: '1px solid rgba(125,211,252,0.15)',
@@ -224,7 +244,6 @@ export default function Home() {
         </p>
       </Card>
 
-      {/* 轻疗愈工具箱 */}
       <Card style={{
         background: 'linear-gradient(135deg, rgba(20,30,50,0.7), rgba(10,15,30,0.8))',
         border: '1px solid rgba(125,211,252,0.15)',
@@ -313,7 +332,6 @@ export default function Home() {
         </div>
       </Card>
 
-      {/* 匿名星云 */}
       <Card style={{ padding: '20px', textAlign: 'center' }}>
         <h3 style={{ color: '#e0eaff' }}>🪐 匿名星云</h3>
         <p style={{ color: '#8890a4', marginTop: '8px' }}>那些被温柔接住的情绪...</p>
